@@ -25,8 +25,10 @@
 
 ## Установка
 
-1. Скачайте `BossGate.dll` из релизов (или соберите сами, см. ниже).
-2. Положите в папку `ServerPlugins/` вашего TShock.
+1. Скачайте готовую сборку: **[dist/BossGate.dll](https://github.com/Solevaral/TimerBossControl/raw/main/dist/BossGate.dll)**
+   (или возьмите из [Releases](https://github.com/Solevaral/TimerBossControl/releases), или соберите сами — см. ниже).
+2. Положите файл в папку `ServerPlugins/` вашего TShock. Больше ничего копировать не нужно —
+   плагин использует сборки, которые уже есть на сервере.
 3. Запустите сервер — файл `tshock/BossGate.json` создастся сам со значениями по умолчанию.
 4. Выдайте админской группе право `bossgate.admin`:
 

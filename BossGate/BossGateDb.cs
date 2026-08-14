@@ -3,6 +3,7 @@ using System.Data;
 using MySql.Data.MySqlClient;
 using TShockAPI;
 using TShockAPI.DB;
+using TShockAPI.DB.Queries;
 
 namespace BossGate
 {
@@ -32,10 +33,22 @@ namespace BossGate
         {
             _db = db;
 
-            var creator = new SqlTableCreator(_db,
-                _db.GetSqlType() == SqlType.Sqlite
-                    ? (IQueryBuilder)new SqliteQueryCreator()
-                    : new MysqlQueryCreator());
+            // Билдер запросов подбираем под фактическую БД сервера.
+            IQueryBuilder builder;
+            switch (_db.GetSqlType())
+            {
+                case SqlType.Sqlite:
+                    builder = new SqliteQueryBuilder();
+                    break;
+                case SqlType.Postgres:
+                    builder = new PostgresQueryBuilder();
+                    break;
+                default:
+                    builder = new MysqlQueryBuilder();
+                    break;
+            }
+
+            var creator = new SqlTableCreator(_db, builder);
 
             // Время храним строкой (тики UTC) — одинаково работает и в SQLite, и в MySQL.
             creator.EnsureTableStructure(new SqlTable(TableName,

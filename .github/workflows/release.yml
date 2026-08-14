@@ -1,0 +1,37 @@
+name: release
+
+# Собирает плагин и прикладывает BossGate.dll к релизу.
+# Запускается при пуше тега вида v1.0.0 или вручную из вкладки Actions.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build
+        run: dotnet build BossGate/BossGate.csproj -c Release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BossGate
+          path: BossGate/bin/Release/BossGate.dll
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: BossGate/bin/Release/BossGate.dll

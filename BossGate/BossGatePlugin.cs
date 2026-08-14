@@ -58,8 +58,9 @@ namespace BossGate
             ServerApi.Hooks.GamePostInitialize.Register(this, OnPostInitialize);
             ServerApi.Hooks.GameUpdate.Register(this, OnUpdate);
             ServerApi.Hooks.NpcSpawn.Register(this, OnNpcSpawn);
-            ServerApi.Hooks.NpcSetDefaults.Register(this, OnNpcSetDefaults);
+            ServerApi.Hooks.NpcSetDefaultsInt.Register(this, OnNpcSetDefaults);
             ServerApi.Hooks.NetGetData.Register(this, OnGetData);
+            GetDataHandlers.ItemDrop.Register(OnItemDrop);
 
             BossGateCommands.Register();
         }
@@ -71,8 +72,9 @@ namespace BossGate
                 ServerApi.Hooks.GamePostInitialize.Deregister(this, OnPostInitialize);
                 ServerApi.Hooks.GameUpdate.Deregister(this, OnUpdate);
                 ServerApi.Hooks.NpcSpawn.Deregister(this, OnNpcSpawn);
-                ServerApi.Hooks.NpcSetDefaults.Deregister(this, OnNpcSetDefaults);
+                ServerApi.Hooks.NpcSetDefaultsInt.Deregister(this, OnNpcSetDefaults);
                 ServerApi.Hooks.NetGetData.Deregister(this, OnGetData);
+                GetDataHandlers.ItemDrop.UnRegister(OnItemDrop);
 
                 BossGateCommands.Deregister();
                 Instance = null;
@@ -346,14 +348,14 @@ namespace BossGate
 
             try
             {
-                if (args.Npc < 0 || args.Npc >= Main.maxNPCs) return;
-                var npc = Main.npc[args.Npc];
+                if (args.NpcId < 0 || args.NpcId >= Main.maxNPCs) return;
+                var npc = Main.npc[args.NpcId];
                 if (npc == null) return;
 
                 BossEntry entry;
                 if (!IsNpcBlocked(npc.netID, out entry)) return;
 
-                DespawnNpc(args.Npc);
+                DespawnNpc(args.NpcId);
                 args.Handled = true;
 
                 if (Config.LogBlockedAttempts)
@@ -371,7 +373,6 @@ namespace BossGate
             var npc = Main.npc[index];
             npc.active = false;
             npc.life = 0;
-            npc.netSkip = -1;
             npc.type = 0;
             NetMessage.SendData((int)PacketTypes.NpcUpdate, -1, -1, NetworkText.Empty, index);
         }
@@ -392,9 +393,6 @@ namespace BossGate
                         HandleSpawnBoss(args);
                         break;
 
-                    case PacketTypes.ItemDrop:
-                        HandleItemDrop(args);
-                        break;
                 }
             }
             catch (Exception ex)
@@ -406,18 +404,33 @@ namespace BossGate
 
         /// <summary>
         /// Пакет 61: клиент использовал предмет призыва (или начал ивент).
-        /// Формат: short playerId, short type (тип NPC для боссов, отрицательное — ивент).
+        /// Полезная нагрузка — playerId и type (тип NPC для боссов, отрицательное — ивент).
+        /// Ширину полей определяем по длине пакета, чтобы не зависеть от версии протокола.
         /// </summary>
         private void HandleSpawnBoss(GetDataEventArgs args)
         {
-            if (args.Length < 4) return;
+            int packetPlayer;
+            int bossType;
 
-            short packetPlayer;
-            short bossType;
             using (var reader = new BinaryReader(new MemoryStream(args.Msg.readBuffer, args.Index, args.Length)))
             {
-                packetPlayer = reader.ReadInt16();
-                bossType = reader.ReadInt16();
+                if (args.Length == 4)
+                {
+                    packetPlayer = reader.ReadInt16();
+                    bossType = reader.ReadInt16();
+                }
+                else if (args.Length >= 8)
+                {
+                    packetPlayer = reader.ReadInt32();
+                    bossType = reader.ReadInt32();
+                }
+                else
+                {
+                    // Неизвестная раскладка: блокировку это не ломает (босс всё равно
+                    // не заспавнится), но предмет вернуть не сможем — пишем в лог.
+                    TShock.Log.ConsoleError("[BossGate] Неожиданная длина пакета 61: " + args.Length);
+                    return;
+                }
             }
 
             if (bossType <= 0) return;   // ивенты (вторжения) плагин не трогает
@@ -443,46 +456,37 @@ namespace BossGate
         }
 
         /// <summary>
-        /// Пакеты 21/90: выброс предмета. Нужен только для Вуду-куклы проводника —
-        /// иначе игрок сможет запустить хардмод, кинув её в лаву.
-        /// Формат: short id, float x, float y, float vx, float vy, short stack, byte prefix, byte noDelay, short type.
+        /// Выброс предмета. Нужен только для Вуду-куклы проводника — иначе игрок
+        /// запустит хардмод, кинув её в лаву при закрытой Стене Плоти.
         /// </summary>
-        private void HandleItemDrop(GetDataEventArgs args)
+        private void OnItemDrop(object sender, GetDataHandlers.ItemDropEventArgs e)
         {
+            if (e.Handled || !Config.Enabled || !_ready) return;
             if (!Config.BlockWallOfFleshHardmode) return;
-            if (args.Length < 24) return;
 
-            short stack;
-            short itemType;
-            using (var reader = new BinaryReader(new MemoryStream(args.Msg.readBuffer, args.Index, args.Length)))
+            try
             {
-                reader.ReadInt16();      // индекс предмета в мире
-                reader.ReadSingle();     // x
-                reader.ReadSingle();     // y
-                reader.ReadSingle();     // vx
-                reader.ReadSingle();     // vy
-                stack = reader.ReadInt16();
-                reader.ReadByte();       // prefix
-                reader.ReadByte();       // noDelay
-                itemType = reader.ReadInt16();
+                if (e.Type != ItemID.GuideVoodooDoll || e.Stacks <= 0) return;
+
+                BossEntry entry;
+                if (!IsNpcBlocked(NPCID.WallofFlesh, out entry)) return;
+
+                e.Handled = true;
+
+                var player = e.Player;
+                if (player == null) return;
+
+                player.GiveItem(ItemID.GuideVoodooDoll, e.Stacks);
+                player.SendMessage(Format(Config.Messages.Blocked, entry.DisplayName), 255, 85, 85);
+                player.SendMessage(Config.Messages.ItemRefunded, 255, 255, 255);
+
+                if (Config.LogBlockedAttempts)
+                    TShock.Log.ConsoleInfo("[BossGate] " + player.Name + " пытался выбросить вуду-куклу проводника.");
             }
-
-            if (itemType != ItemID.GuideVoodooDoll || stack <= 0) return;
-
-            BossEntry entry;
-            if (!IsNpcBlocked(NPCID.WallofFlesh, out entry)) return;
-
-            args.Handled = true;
-
-            var player = TShock.Players[args.Msg.whoAmI];
-            if (player == null) return;
-
-            player.GiveItem(ItemID.GuideVoodooDoll, stack);
-            player.SendMessage(Format(Config.Messages.Blocked, entry.DisplayName), 255, 85, 85);
-            player.SendMessage(Config.Messages.ItemRefunded, 255, 255, 255);
-
-            if (Config.LogBlockedAttempts)
-                TShock.Log.ConsoleInfo("[BossGate] " + player.Name + " пытался выбросить вуду-куклу проводника.");
+            catch (Exception ex)
+            {
+                TShock.Log.ConsoleError("[BossGate] Ошибка в ItemDrop: " + ex.Message);
+            }
         }
 
         /// <summary>Возвращает игроку предмет призыва, если он известен для этого босса.</summary>
