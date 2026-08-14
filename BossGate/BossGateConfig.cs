@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Newtonsoft.Json;
+using Terraria.ID;
 
 namespace BossGate
 {
@@ -111,46 +112,76 @@ namespace BossGate
             var c = new BossGateConfig();
             c.Bosses = new List<BossEntry>
             {
-                Boss("king_slime", "Королевский слизень", new[] { 50 },
-                    Map(50, 560)),                                   // Корона слизней
-                Boss("eye_of_cthulhu", "Глаз Ктулху", new[] { 4 },
-                    Map(4, 43)),                                     // Подозрительный глаз
+                Boss("king_slime", "Королевский слизень",
+                    new[] { NPCID.KingSlime },
+                    Map(NPCID.KingSlime, ItemID.SlimeCrown)),
+                Boss("eye_of_cthulhu", "Глаз Ктулху",
+                    new[] { NPCID.EyeofCthulhu },
+                    Map(NPCID.EyeofCthulhu, ItemID.SuspiciousLookingEye)),
                 Boss("eow_boc", "Пожиратель миров / Мозг Ктулху",
-                    new[] { 13, 14, 15, 266, 267 },                  // сегменты червя + мозг с криперами
-                    Map(13, 70, 266, 1331)),                         // Червивая еда / Кровавый позвоночник
-                Boss("queen_bee", "Пчелиная матка", new[] { 222 },
-                    Map(222, 1133)),                                 // Мерзкий улей
-                Boss("skeletron", "Скелетрон", new[] { 35, 36 },
-                    Map(35, 1307)),                                  // Вуду-кукла портного
-                Boss("deerclops", "Лютый олень", new[] { 668 },
-                    Map(668, 4986)),                                 // Оленья штучка
-                Boss("wall_of_flesh", "Стена Плоти", new[] { 113, 114, 115, 116 },
-                    Map(113, 267)),                                  // Вуду-кукла проводника
-                Boss("queen_slime", "Королева слизней", new[] { 657 },
-                    Map(657, 4988)),                                 // Желатиновый кристалл
+                    // все сегменты червя + мозг со своими криперами
+                    new[] { NPCID.EaterofWorldsHead, NPCID.EaterofWorldsBody, NPCID.EaterofWorldsTail,
+                            NPCID.BrainofCthulhu, NPCID.Creeper },
+                    Map(NPCID.EaterofWorldsHead, ItemID.WormFood,
+                        NPCID.BrainofCthulhu, ItemID.BloodySpine)),
+                Boss("queen_bee", "Пчелиная матка",
+                    new[] { NPCID.QueenBee },
+                    Map(NPCID.QueenBee, ItemID.Abeemination)),
+                Boss("skeletron", "Скелетрон",
+                    new[] { NPCID.SkeletronHead, NPCID.SkeletronHand },
+                    Map(NPCID.SkeletronHead, ItemID.ClothierVoodooDoll)),
+                Boss("deerclops", "Лютый олень",
+                    new[] { NPCID.Deerclops },
+                    Map(NPCID.Deerclops, ItemID.DeerThing)),
+                Boss("wall_of_flesh", "Стена Плоти",
+                    new[] { NPCID.WallofFlesh, NPCID.WallofFleshEye, NPCID.TheHungry, NPCID.TheHungryII },
+                    Map(NPCID.WallofFlesh, ItemID.GuideVoodooDoll)),
+                Boss("queen_slime", "Королева слизней",
+                    new[] { NPCID.QueenSlimeBoss },
+                    Map(NPCID.QueenSlimeBoss, ItemID.QueenSlimeCrystal)),
                 Boss("mech_bosses", "Механические боссы (Близнецы / Уничтожитель / Скелетрон Прайм)",
-                    new[] { 125, 126, 134, 135, 136, 127, 128, 129, 130, 131 },
-                    Map(125, 544, 134, 556, 127, 557)),              // Механический глаз / червь / череп
-                Boss("plantera", "Плантера", new[] { 262, 263, 264 }, Map()),
-                Boss("golem", "Голем", new[] { 245, 246, 247, 248, 249 },
-                    Map(245, 1293)),                                 // Лихзардский энергоэлемент
-                Boss("duke_fishron", "Герцог Рыброн", new[] { 370 },
-                    Map(370, 2673)),                                 // Трюфельный червь
-                Boss("empress_of_light", "Императрица Света", new[] { 636 }, Map()),
-                Boss("lunatic_cultist", "Лунатик-культист", new[] { 439, 440 }, Map()),
-                Boss("moon_lord", "Лунный Лорд", new[] { 396, 397, 398, 400, 401 },
-                    Map(398, 3601))                                  // Небесная печать
+                    new[] { NPCID.Retinazer, NPCID.Spazmatism,
+                            NPCID.TheDestroyer, NPCID.TheDestroyerBody, NPCID.TheDestroyerTail,
+                            NPCID.SkeletronPrime, NPCID.PrimeCannon, NPCID.PrimeSaw,
+                            NPCID.PrimeVice, NPCID.PrimeLaser },
+                    Map(NPCID.Retinazer, ItemID.MechanicalEye,
+                        NPCID.TheDestroyer, ItemID.MechanicalWorm,
+                        NPCID.SkeletronPrime, ItemID.MechanicalSkull)),
+                Boss("plantera", "Плантера",
+                    new[] { NPCID.Plantera, NPCID.PlanterasHook, NPCID.PlanterasTentacle },
+                    Map()),
+                Boss("golem", "Голем",
+                    new[] { NPCID.Golem, NPCID.GolemHead, NPCID.GolemFistLeft,
+                            NPCID.GolemFistRight, NPCID.GolemHeadFree },
+                    Map(NPCID.Golem, ItemID.LihzahrdPowerCell)),
+                Boss("duke_fishron", "Герцог Рыброн",
+                    new[] { NPCID.DukeFishron },
+                    Map(NPCID.DukeFishron, ItemID.TruffleWorm)),
+                Boss("empress_of_light", "Императрица Света",
+                    new[] { NPCID.HallowBoss },
+                    Map()),
+                Boss("lunatic_cultist", "Лунатик-культист",
+                    new[] { NPCID.CultistBoss, NPCID.CultistBossClone },
+                    Map()),
+                Boss("moon_lord", "Лунный Лорд",
+                    new[] { NPCID.MoonLordCore, NPCID.MoonLordHead, NPCID.MoonLordHand,
+                            NPCID.MoonLordFreeEye, NPCID.MoonLordLeechBlob },
+                    Map(NPCID.MoonLordCore, ItemID.CelestialSigil))
             };
             return c;
         }
 
-        private static BossEntry Boss(string key, string name, int[] npcIds, Dictionary<int, int> items)
+        private static BossEntry Boss(string key, string name, short[] npcIds, Dictionary<int, int> items)
         {
+            var ids = new List<int>(npcIds.Length);
+            foreach (var id in npcIds)
+                ids.Add(id);
+
             return new BossEntry
             {
                 Key = key,
                 DisplayName = name,
-                NpcIds = new List<int>(npcIds),
+                NpcIds = ids,
                 SummonItems = items
             };
         }

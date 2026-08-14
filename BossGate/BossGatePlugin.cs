@@ -19,7 +19,7 @@ namespace BossGate
         public override string Name => "BossGate";
         public override string Author => "Solevara";
         public override string Description => "Открывает боссов по одному раз в N реальных часов";
-        public override Version Version => new Version(1, 0, 0);
+        public override Version Version => new Version(1, 0, 1);
 
         /// <summary>Права: обычные игроки.</summary>
         public const string PermUse = "bossgate.use";
