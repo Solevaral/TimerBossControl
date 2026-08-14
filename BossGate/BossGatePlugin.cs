@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using Terraria;
 using Terraria.ID;
 using Terraria.Localization;
@@ -19,7 +20,7 @@ namespace BossGate
         public override string Name => "BossGate";
         public override string Author => "Solevara";
         public override string Description => "Открывает боссов по одному раз в N реальных часов";
-        public override Version Version => new Version(1, 0, 1);
+        public override Version Version => new Version(1, 1, 0);
 
         /// <summary>Права: обычные игроки.</summary>
         public const string PermUse = "bossgate.use";
@@ -183,10 +184,94 @@ namespace BossGate
 
         internal bool AllUnlocked => State == null || State.UnlockedCount >= Config.Bosses.Count;
 
+        internal bool IsPaused => State != null && State.Paused;
+
+        /// <summary>Сколько осталось до открытия следующего босса (с учётом паузы).</summary>
+        internal TimeSpan TimeLeft
+        {
+            get
+            {
+                if (State == null) return TimeSpan.Zero;
+                var left = State.Paused ? State.PausedRemaining : NextUnlockUtc - DateTime.UtcNow;
+                return left < TimeSpan.Zero ? TimeSpan.Zero : left;
+            }
+        }
+
+        /// <summary>Следующий закрытый босс или null, если открыты все.</summary>
+        internal BossEntry NextBoss =>
+            AllUnlocked ? null : Config.Bosses[State.UnlockedCount];
+
+        /// <summary>Останавливает таймер. false — он уже стоял.</summary>
+        internal bool PauseTimer()
+        {
+            if (State == null || State.Paused) return false;
+
+            State.PausedRemaining = TimeLeft;
+            State.Paused = true;
+            _reminderSent = false;
+            SaveState();
+            return true;
+        }
+
+        /// <summary>Продолжает таймер с того же остатка. false — он и не стоял.</summary>
+        internal bool ResumeTimer()
+        {
+            if (State == null || !State.Paused) return false;
+
+            // Раскладываем остаток обратно в абсолютную метку последней разблокировки.
+            State.LastUnlockUtc = DateTime.UtcNow + State.PausedRemaining - Interval;
+            State.Paused = false;
+            State.PausedRemaining = TimeSpan.Zero;
+            _reminderSent = false;
+            SaveState();
+            return true;
+        }
+
+        /// <summary>
+        /// Начинает отсчёт до следующего босса заново (полный интервал).
+        /// Пауза при этом сохраняется — просто "замороженный" остаток становится полным.
+        /// </summary>
+        internal void RestartInterval()
+        {
+            if (State == null) return;
+
+            State.LastUnlockUtc = DateTime.UtcNow;
+            if (State.Paused)
+                State.PausedRemaining = Interval;
+            _reminderSent = false;
+            SaveState();
+        }
+
+        /// <summary>
+        /// Сдвигает время до открытия: положительный span откладывает, отрицательный приближает.
+        /// Работает и на паузе. Остаток не уходит в минус.
+        /// </summary>
+        internal void ShiftTimer(TimeSpan delta)
+        {
+            if (State == null) return;
+
+            if (State.Paused)
+            {
+                State.PausedRemaining += delta;
+                if (State.PausedRemaining < TimeSpan.Zero)
+                    State.PausedRemaining = TimeSpan.Zero;
+            }
+            else
+            {
+                var left = TimeLeft + delta;
+                if (left < TimeSpan.Zero) left = TimeSpan.Zero;
+                State.LastUnlockUtc = DateTime.UtcNow + left - Interval;
+            }
+
+            _reminderSent = false;
+            SaveState();
+        }
+
         /// <summary>Открывает всех боссов, срок которых уже наступил.</summary>
         private void ProcessUnlocks(bool announce)
         {
             if (!_ready || State == null || Config.Bosses.Count == 0) return;
+            if (State.Paused) return;   // на паузе время не идёт
 
             var now = DateTime.UtcNow;
             var interval = Interval;
@@ -232,12 +317,12 @@ namespace BossGate
         /// <summary>Напоминание за час до открытия следующего босса.</summary>
         private void SendReminderIfNeeded()
         {
-            if (!Config.AnnounceHourBefore || _reminderSent || AllUnlocked) return;
+            if (!Config.AnnounceHourBefore || _reminderSent || AllUnlocked || IsPaused) return;
 
-            var left = NextUnlockUtc - DateTime.UtcNow;
+            var left = TimeLeft;
             if (left <= TimeSpan.FromHours(1) && left > TimeSpan.Zero)
             {
-                var boss = Config.Bosses[State.UnlockedCount];
+                var boss = NextBoss;
                 Broadcast(Format(Config.Messages.UnlockReminder, boss.DisplayName, FormatSpan(left)), 255, 221, 85);
                 _reminderSent = true;
             }
@@ -530,8 +615,62 @@ namespace BossGate
             }
         }
 
+        /// <summary>
+        /// Разбирает длительность вида "1h 30m 10s", "1ч30м", "2d", "90m".
+        /// Суффиксы: d/д — дни, h/ч — часы, m/м — минуты, s/с — секунды.
+        /// Возвращает false, если строка пустая или содержит что-то кроме таких пар.
+        /// </summary>
+        public static bool TryParseDuration(IEnumerable<string> tokens, out TimeSpan result)
+        {
+            result = TimeSpan.Zero;
+            if (tokens == null) return false;
+
+            // Пробелы могут прийти как отдельными аргументами, так и внутри кавычек.
+            var text = Regex.Replace(string.Join("", tokens), @"\s+", "").ToLowerInvariant();
+            if (text.Length == 0) return false;
+
+            var matches = DurationRegex.Matches(text);
+            if (matches.Count == 0) return false;
+
+            // Вся строка должна состоять только из распознанных пар — иначе это опечатка.
+            int consumed = 0;
+            foreach (Match m in matches)
+                consumed += m.Length;
+            if (consumed != text.Length) return false;
+
+            foreach (Match m in matches)
+            {
+                long value;
+                if (!long.TryParse(m.Groups[1].Value, out value)) return false;
+
+                switch (m.Groups[2].Value)
+                {
+                    case "d":
+                    case "д":
+                        result += TimeSpan.FromDays(value);
+                        break;
+                    case "h":
+                    case "ч":
+                        result += TimeSpan.FromHours(value);
+                        break;
+                    case "m":
+                    case "м":
+                        result += TimeSpan.FromMinutes(value);
+                        break;
+                    default:
+                        result += TimeSpan.FromSeconds(value);
+                        break;
+                }
+            }
+
+            return result > TimeSpan.Zero;
+        }
+
+        private static readonly Regex DurationRegex =
+            new Regex(@"(\d+)\s*(d|h|m|s|д|ч|м|с)", RegexOptions.Compiled);
+
         /// <summary>Человекочитаемый остаток времени на русском.</summary>
-        internal static string FormatSpan(TimeSpan span)
+        public static string FormatSpan(TimeSpan span)
         {
             if (span < TimeSpan.Zero) span = TimeSpan.Zero;
 

@@ -61,6 +61,28 @@ namespace BossGate
         /// <summary>{0} — имя следующего босса, {1} — отформатированное время.</summary>
         public string TimeLeft = "Следующий босс ({0}) откроется через {1}.";
 
+        /// <summary>{0} — имя следующего босса, {1} — оставшееся время.</summary>
+        public string TimeLeftPaused = "[c/ff5555:Таймер остановлен.] До следующего босса ({0}) оставалось {1}.";
+
+        /// <summary>{0} — добавленное время, {1} — имя босса, {2} — сколько осталось теперь.</summary>
+        public string TimeAdded = "[c/ffdd55:К таймеру боссов добавлено {0}.] До открытия ({1}) осталось {2}.";
+
+        /// <summary>{0} — снятое время, {1} — имя босса, {2} — сколько осталось теперь.</summary>
+        public string TimeRemoved = "[c/ffdd55:Таймер боссов сокращён на {0}.] До открытия ({1}) осталось {2}.";
+
+        /// <summary>{0} — имя босса, {1} — сколько оставалось на момент паузы.</summary>
+        public string TimerStopped = "[c/ff5555:Таймер боссов остановлен.] До открытия ({0}) оставалось {1}.";
+
+        /// <summary>{0} — имя босса, {1} — сколько осталось.</summary>
+        public string TimerStarted = "[c/55ff55:Таймер боссов продолжен.] До открытия ({0}) осталось {1}.";
+
+        public string TimerAlreadyStopped = "Таймер уже остановлен.";
+
+        public string TimerAlreadyRunning = "Таймер и так идёт.";
+
+        /// <summary>Подсказка по формату времени.</summary>
+        public string BadDuration = "Не понял время. Примеры: 1h, 30m, 1h 30m 10s, 2d.";
+
         public string AllUnlocked = "Все боссы уже открыты.";
 
         public string Disabled = "Ограничение боссов сейчас выключено — доступны все.";

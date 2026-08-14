@@ -21,6 +21,15 @@ namespace BossGate
         /// Хранится абсолютным временем, поэтому таймер "тикает" и пока сервер выключен.
         /// </summary>
         public DateTime LastUnlockUtc;
+
+        /// <summary>Таймер остановлен админом (/boss timestop).</summary>
+        public bool Paused;
+
+        /// <summary>
+        /// Сколько оставалось до открытия в момент паузы. Пока таймер стоит, показываем
+        /// именно это значение, и именно его меняют addtime/removetime.
+        /// </summary>
+        public TimeSpan PausedRemaining;
     }
 
     /// <summary>Хранилище состояния в базе TShock (по умолчанию SQLite: tshock/tshock.sqlite).</summary>
@@ -55,14 +64,17 @@ namespace BossGate
                 new SqlColumn("WorldId", MySqlDbType.Int32) { Primary = true, Unique = true },
                 new SqlColumn("UnlockedCount", MySqlDbType.Int32),
                 new SqlColumn("StartUtc", MySqlDbType.Text),
-                new SqlColumn("LastUnlockUtc", MySqlDbType.Text)));
+                new SqlColumn("LastUnlockUtc", MySqlDbType.Text),
+                new SqlColumn("Paused", MySqlDbType.Int32),
+                new SqlColumn("PausedRemaining", MySqlDbType.Text)));
         }
 
         /// <summary>Читает состояние мира; если записи нет — создаёт новую с отсчётом от текущего момента.</summary>
         public BossGateState LoadOrCreate(int worldId)
         {
             using (var reader = _db.QueryReader(
-                "SELECT UnlockedCount, StartUtc, LastUnlockUtc FROM " + TableName + " WHERE WorldId = @0", worldId))
+                "SELECT UnlockedCount, StartUtc, LastUnlockUtc, Paused, PausedRemaining FROM " + TableName +
+                " WHERE WorldId = @0", worldId))
             {
                 if (reader.Read())
                 {
@@ -70,7 +82,9 @@ namespace BossGate
                     {
                         UnlockedCount = reader.Get<int>("UnlockedCount"),
                         StartUtc = ParseUtc(reader.Get<string>("StartUtc")),
-                        LastUnlockUtc = ParseUtc(reader.Get<string>("LastUnlockUtc"))
+                        LastUnlockUtc = ParseUtc(reader.Get<string>("LastUnlockUtc")),
+                        Paused = reader.Get<int?>("Paused").GetValueOrDefault() != 0,
+                        PausedRemaining = ParseSpan(reader.Get<string>("PausedRemaining"))
                     };
                     if (state.UnlockedCount < 0)
                         state.UnlockedCount = 0;
@@ -94,11 +108,23 @@ namespace BossGate
             // Upsert без диалект-специфичного синтаксиса.
             _db.Query("DELETE FROM " + TableName + " WHERE WorldId = @0", worldId);
             _db.Query(
-                "INSERT INTO " + TableName + " (WorldId, UnlockedCount, StartUtc, LastUnlockUtc) VALUES (@0, @1, @2, @3)",
+                "INSERT INTO " + TableName +
+                " (WorldId, UnlockedCount, StartUtc, LastUnlockUtc, Paused, PausedRemaining)" +
+                " VALUES (@0, @1, @2, @3, @4, @5)",
                 worldId,
                 state.UnlockedCount,
                 state.StartUtc.Ticks.ToString(),
-                state.LastUnlockUtc.Ticks.ToString());
+                state.LastUnlockUtc.Ticks.ToString(),
+                state.Paused ? 1 : 0,
+                state.PausedRemaining.Ticks.ToString());
+        }
+
+        private static TimeSpan ParseSpan(string raw)
+        {
+            long ticks;
+            if (!long.TryParse(raw, out ticks) || ticks < 0)
+                return TimeSpan.Zero;
+            return TimeSpan.FromTicks(ticks);
         }
 
         private static DateTime ParseUtc(string raw)

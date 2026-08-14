@@ -32,6 +32,192 @@ namespace BossGate
 
             Add(Make(BossGatePlugin.PermAdmin, CmdBossReload,
                 "Перезагружает конфиг BossGate.", "bossreload"));
+
+            // Единая команда с подкомандами. Права проверяются внутри, чтобы информационные
+            // подкоманды остались доступны всем.
+            Add(Make(null, CmdBoss,
+                "/boss <list|time|addtime|removetime|timestop|timestart|unlock|lock|reload>", "boss"));
+        }
+
+        // ------------------------------------------------------------------
+        // /boss <подкоманда>
+        // ------------------------------------------------------------------
+
+        private static void CmdBoss(CommandArgs args)
+        {
+            var sub = args.Parameters.Count > 0 ? args.Parameters[0].ToLowerInvariant() : "";
+            // Остальные параметры — аргументы подкоманды.
+            var rest = args.Parameters.Count > 1
+                ? args.Parameters.GetRange(1, args.Parameters.Count - 1)
+                : new List<string>();
+
+            switch (sub)
+            {
+                case "list":
+                case "bosses":
+                case "список":
+                    CmdBosses(args);
+                    return;
+
+                case "time":
+                case "время":
+                    CmdBossTime(args);
+                    return;
+
+                case "addtime":
+                case "removetime":
+                    if (!RequireAdmin(args)) return;
+                    ShiftTime(args, rest, sub == "addtime");
+                    return;
+
+                case "timestop":
+                case "stop":
+                case "pause":
+                    if (!RequireAdmin(args)) return;
+                    StopTimer(args);
+                    return;
+
+                case "timestart":
+                case "start":
+                case "resume":
+                    if (!RequireAdmin(args)) return;
+                    StartTimer(args);
+                    return;
+
+                case "unlock":
+                    if (!RequireAdmin(args)) return;
+                    CmdBossUnlock(args);
+                    return;
+
+                case "lock":
+                    if (!RequireAdmin(args)) return;
+                    args.Parameters.RemoveAt(0);      // чтобы /bosslock увидел количество первым
+                    CmdBossLock(args);
+                    return;
+
+                case "reload":
+                    if (!RequireAdmin(args)) return;
+                    CmdBossReload(args);
+                    return;
+
+                default:
+                    SendUsage(args);
+                    return;
+            }
+        }
+
+        private static void SendUsage(CommandArgs args)
+        {
+            args.Player.SendInfoMessage("Команды BossGate:");
+            args.Player.SendInfoMessage("  /boss list — список боссов");
+            args.Player.SendInfoMessage("  /boss time — сколько осталось до следующего");
+
+            if (!args.Player.HasPermission(BossGatePlugin.PermAdmin)) return;
+
+            args.Player.SendInfoMessage("  /boss addtime 1h 30m — отложить открытие");
+            args.Player.SendInfoMessage("  /boss removetime 1h — приблизить открытие");
+            args.Player.SendInfoMessage("  /boss timestop — остановить таймер");
+            args.Player.SendInfoMessage("  /boss timestart — продолжить таймер");
+            args.Player.SendInfoMessage("  /boss unlock | /boss lock <n> | /boss reload");
+        }
+
+        private static bool RequireAdmin(CommandArgs args)
+        {
+            if (args.Player.HasPermission(BossGatePlugin.PermAdmin)) return true;
+            args.Player.SendErrorMessage("Нужно право " + BossGatePlugin.PermAdmin + ".");
+            return false;
+        }
+
+        /// <summary>Общая часть addtime/removetime.</summary>
+        private static void ShiftTime(CommandArgs args, List<string> duration, bool add)
+        {
+            var p = BossGatePlugin.Instance;
+            if (p == null || p.State == null)
+            {
+                args.Player.SendErrorMessage("BossGate ещё не инициализирован.");
+                return;
+            }
+
+            if (p.AllUnlocked)
+            {
+                args.Player.SendInfoMessage(p.Config.Messages.AllUnlocked);
+                return;
+            }
+
+            TimeSpan span;
+            if (!BossGatePlugin.TryParseDuration(duration, out span))
+            {
+                args.Player.SendErrorMessage(p.Config.Messages.BadDuration);
+                return;
+            }
+
+            p.ShiftTimer(add ? span : -span);
+
+            var boss = p.NextBoss;
+            var template = add ? p.Config.Messages.TimeAdded : p.Config.Messages.TimeRemoved;
+            BossGatePlugin.Broadcast(BossGatePlugin.Format(template,
+                BossGatePlugin.FormatSpan(span), boss.DisplayName, BossGatePlugin.FormatSpan(p.TimeLeft)),
+                255, 221, 85);
+
+            TShock.Log.ConsoleInfo("[BossGate] " + args.Player.Name + (add ? " добавил " : " убрал ") +
+                                   BossGatePlugin.FormatSpan(span) + ", осталось " +
+                                   BossGatePlugin.FormatSpan(p.TimeLeft));
+        }
+
+        private static void StopTimer(CommandArgs args)
+        {
+            var p = BossGatePlugin.Instance;
+            if (p == null || p.State == null)
+            {
+                args.Player.SendErrorMessage("BossGate ещё не инициализирован.");
+                return;
+            }
+
+            if (p.AllUnlocked)
+            {
+                args.Player.SendInfoMessage(p.Config.Messages.AllUnlocked);
+                return;
+            }
+
+            if (!p.PauseTimer())
+            {
+                args.Player.SendInfoMessage(p.Config.Messages.TimerAlreadyStopped);
+                return;
+            }
+
+            BossGatePlugin.Broadcast(BossGatePlugin.Format(p.Config.Messages.TimerStopped,
+                p.NextBoss.DisplayName, BossGatePlugin.FormatSpan(p.TimeLeft)), 255, 85, 85);
+
+            TShock.Log.ConsoleInfo("[BossGate] " + args.Player.Name + " остановил таймер, осталось " +
+                                   BossGatePlugin.FormatSpan(p.TimeLeft));
+        }
+
+        private static void StartTimer(CommandArgs args)
+        {
+            var p = BossGatePlugin.Instance;
+            if (p == null || p.State == null)
+            {
+                args.Player.SendErrorMessage("BossGate ещё не инициализирован.");
+                return;
+            }
+
+            if (!p.ResumeTimer())
+            {
+                args.Player.SendInfoMessage(p.Config.Messages.TimerAlreadyRunning);
+                return;
+            }
+
+            if (p.AllUnlocked)
+            {
+                args.Player.SendSuccessMessage(p.Config.Messages.AllUnlocked);
+                return;
+            }
+
+            BossGatePlugin.Broadcast(BossGatePlugin.Format(p.Config.Messages.TimerStarted,
+                p.NextBoss.DisplayName, BossGatePlugin.FormatSpan(p.TimeLeft)), 85, 255, 85);
+
+            TShock.Log.ConsoleInfo("[BossGate] " + args.Player.Name + " продолжил таймер, осталось " +
+                                   BossGatePlugin.FormatSpan(p.TimeLeft));
         }
 
         /// <summary>permission == null — команда доступна всем без права.</summary>
@@ -107,10 +293,10 @@ namespace BossGate
                 return;
             }
 
-            var next = p.Config.Bosses[p.State.UnlockedCount];
-            var left = p.NextUnlockUtc - DateTime.UtcNow;
-            args.Player.SendInfoMessage(BossGatePlugin.Format(
-                p.Config.Messages.TimeLeft, next.DisplayName, BossGatePlugin.FormatSpan(left)));
+            var next = p.NextBoss;
+            var left = BossGatePlugin.FormatSpan(p.TimeLeft);
+            var template = p.IsPaused ? p.Config.Messages.TimeLeftPaused : p.Config.Messages.TimeLeft;
+            args.Player.SendInfoMessage(BossGatePlugin.Format(template, next.DisplayName, left));
         }
 
         private static void CmdBossUnlock(CommandArgs args)
@@ -128,10 +314,9 @@ namespace BossGate
                 return;
             }
 
-            var boss = p.Config.Bosses[p.State.UnlockedCount];
+            var boss = p.NextBoss;
             p.State.UnlockedCount++;
-            p.State.LastUnlockUtc = DateTime.UtcNow;   // отсчёт до следующего пойдёт заново
-            p.SaveState();
+            p.RestartInterval();                      // отсчёт до следующего пойдёт заново
 
             BossGatePlugin.Broadcast(
                 BossGatePlugin.Format(p.Config.Messages.UnlockBroadcast, boss.DisplayName), 255, 221, 85);
@@ -162,8 +347,7 @@ namespace BossGate
             }
 
             p.State.UnlockedCount = Math.Max(0, p.State.UnlockedCount - count);
-            p.State.LastUnlockUtc = DateTime.UtcNow;   // иначе просроченный таймер сразу вернёт босса
-            p.SaveState();
+            p.RestartInterval();                      // иначе просроченный таймер сразу вернёт босса
 
             args.Player.SendSuccessMessage(BossGatePlugin.Format(
                 p.Config.Messages.AdminLocked, count, p.State.UnlockedCount));
