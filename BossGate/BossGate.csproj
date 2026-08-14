@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>BossGate</AssemblyName>
+    <RootNamespace>BossGate</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Version>1.0.0</Version>
+    <Authors>Solevara</Authors>
+    <Description>Плагин TShock: последовательная разблокировка боссов по реальному времени</Description>
+
+    <!-- Плагин грузится хостом (TShock), поэтому зависимости в выходную папку не копируем -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    Вариант 1 (по умолчанию): ссылка на NuGet-пакет TShock.
+    ExcludeAssets="runtime" — сборки TShock/OTAPI/Terraria уже есть на сервере,
+    дублировать их рядом с плагином нельзя.
+  -->
+  <ItemGroup>
+    <PackageReference Include="TShock" Version="6.1.0" ExcludeAssets="runtime" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Вариант 2 (если пакета нужной версии нет в вашем фиде): ссылки на DLL из папки сервера.
+    Закомментируйте ItemGroup выше, раскомментируйте этот блок и задайте путь к серверу:
+      dotnet build -c Release -p:TShockPath=C:\TShock
+
+  <PropertyGroup>
+    <TShockPath Condition="'$(TShockPath)' == ''">..\lib</TShockPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="TShockAPI">
+      <HintPath>$(TShockPath)\TShockAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="TerrariaServer">
+      <HintPath>$(TShockPath)\TerrariaServer.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="OTAPI">
+      <HintPath>$(TShockPath)\OTAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(TShockPath)\Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ModFramework">
+      <HintPath>$(TShockPath)\ModFramework.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  -->
+
+</Project>
